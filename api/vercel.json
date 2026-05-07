@@ -1,0 +1,39 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)",     "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options",    "value": "nosniff" },
+        { "key": "X-Frame-Options",           "value": "DENY" },
+        { "key": "X-XSS-Protection",          "value": "1; mode=block" },
+        { "key": "Referrer-Policy",           "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in; connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co;"
+        }
+      ]
+    }
+  ],
+  "build": {
+    "env": {
+      "SUPABASE_URL":     "@supabase_url",
+      "SUPABASE_ANON_KEY":"@supabase_anon_key"
+    }
+  },
+  "env": {
+    "SUPABASE_URL":              "@supabase_url",
+    "SUPABASE_ANON_KEY":         "@supabase_anon_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
+    "ALLOWED_ORIGIN":            "@allowed_origin"
+  },
+  "functions": {
+    "api/admin.js": {
+      "memory": 256,
+      "maxDuration": 10
+    }
+  }
+}

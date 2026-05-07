@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bench — Workshop Job Management</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!--
+    Supabase JS client (loaded before app.js so it's available globally).
+    We use the CDN UMD build — no build step required for deployment.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <!--
+    Environment config injected by Vercel at runtime via _redirects / edge config,
+    OR served as a tiny generated script. In local dev, create a config.js file:
+
+      window.__BENCH_CONFIG__ = {
+        supabaseUrl:     "https://xxxx.supabase.co",
+        supabaseAnonKey: "eyJ..."
+      };
+
+    In Vercel: set SUPABASE_URL and SUPABASE_ANON_KEY as Environment Variables.
+    Vercel will replace the tokens below when serving this file via the
+    @vercel/static-config edge function (see vercel.json).
+
+    NEVER hard-code credentials here.
+  -->
+  <script>
+    window.__BENCH_CONFIG__ = {
+      supabaseUrl:     "%SUPABASE_URL%",
+      supabaseAnonKey: "%SUPABASE_ANON_KEY%"
+    };
+  </script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="login-screen" class="screen">
+  <div class="login-card">
+    <div class="login-logo">Bench</div>
+    <div class="login-tagline">Workshop Job Management</div>
+
+    <div class="field">
+      <label for="login-email">Email address</label>
+      <input type="email" id="login-email" placeholder="you@yourbusiness.com" autocomplete="email" />
+    </div>
+    <div class="field">
+      <label for="login-pass">Password</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+
+    <div id="login-error" class="error-msg"></div>
+
+    <button id="login-btn" class="btn btn-primary" style="margin-top:8px;">Sign in</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     APP SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="app-screen" class="screen">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-logo">Bench<span>.</span></div>
+
+    <nav class="topbar-nav" role="navigation" aria-label="Main navigation">
+      <button class="nav-btn active" data-page="jobs">Jobs</button>
+      <button class="nav-btn" data-page="bulk" id="bulk-nav-btn" hidden>Bulk Update</button>
+      <button class="nav-btn" data-page="admin" id="admin-nav-btn" hidden>Admin</button>
+    </nav>
+
+    <div class="topbar-user">
+      <div class="user-badge" id="topbar-initials"></div>
+      <span class="user-name" id="topbar-username"></span>
+      <button class="topbar-action-btn" id="appearance-btn" title="Appearance">⚙ Appearance</button>
+      <button class="topbar-action-btn" id="logout-btn">Sign out</button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+
+    <!-- ─── JOBS PAGE ─────────────────────────────────────── -->
+    <section id="page-jobs" class="page active">
+
+      <div class="page-header">
+        <div>
+          <div class="page-title">Jobs</div>
+          <div class="page-sub" id="jobs-count"></div>
+        </div>
+        <div class="flex gap-8 items-center">
+          <button id="export-csv-btn" class="btn btn-secondary btn-sm">Export CSV</button>
+          <button id="new-job-btn" class="btn btn-gold">+ New Job</button>
+        </div>
+      </div>
+
+      <!-- Open / Closed toggle -->
+      <div class="flex items-center gap-8" style="margin-bottom:16px;">
+        <div class="open-closed-toggle" role="group" aria-label="Show open or closed jobs">
+          <button class="oc-btn active active-open" id="oc-open" data-oc-filter="open">Open</button>
+          <button class="oc-btn" id="oc-all"    data-oc-filter="all">All</button>
+          <button class="oc-btn" id="oc-closed" data-oc-filter="closed">Closed</button>
+        </div>
+      </div>
+
+      <!-- Saved view chips -->
+      <div class="filter-row-2">
+        <div id="saved-filter-chips" class="flex gap-8 items-center" style="flex-wrap:wrap;"></div>
+        <button id="save-filter-btn" class="save-filter-btn">+ Save view</button>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-bar">
+        <input type="search" id="filter-search" placeholder="Search jobs…" aria-label="Search jobs" />
+        <select id="filter-status"   aria-label="Filter by status"></select>
+        <select id="filter-location" aria-label="Filter by location"></select>
+        <select id="filter-type"     aria-label="Filter by type"></select>
+        <select id="filter-staff"    aria-label="Filter by staff member"></select>
+      </div>
+
+      <!-- Sort & Group -->
+      <div class="sort-group-bar">
+        <label>Sort</label>
+        <select id="sort-field" aria-label="Sort by">
+          <option value="created">Date created</option>
+          <option value="due">Due date</option>
+          <option value="client">Client name</option>
+          <option value="status">Status</option>
+          <option value="location">Location</option>
+          <option value="staff">Staff</option>
+          <option value="type">Type</option>
+          <option value="num">Job number</option>
+        </select>
+        <button id="sort-dir-btn" class="sort-dir-btn" title="Toggle sort direction">↓</button>
+        <div class="divider-vert"></div>
+        <label>Group</label>
+        <select id="group-field" aria-label="Group by">
+          <option value="">No grouping</option>
+          <option value="status">Status</option>
+          <option value="location">Location</option>
+          <option value="staff">Staff member</option>
+          <option value="type">Type</option>
+          <option value="due_week">Due week</option>
+          <option value="due_month">Due month</option>
+        </select>
+      </div>
+
+      <!-- Jobs table -->
+      <div class="jobs-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Job #</th>
+              <th>Client</th>
+              <th>Reference</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Location</th>
+              <th>Staff</th>
+              <th>Due</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-tbody">
+            <tr class="loading-row">
+              <td colspan="8"><div class="spinner"></div> Loading jobs…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination bar -->
+      <div class="pagination-wrap">
+        <div class="pagination-left">
+          <label for="page-size-select" class="page-size-label">Rows per page</label>
+          <select id="page-size-select" class="page-size-select" aria-label="Rows per page">
+            <option value="20">20</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div id="pagination-bar" class="pagination-bar" role="navigation" aria-label="Job list pagination"></div>
+      </div>
+
+    </section><!-- /page-jobs -->
+
+
+    <!-- ─── BULK UPDATE PAGE ──────────────────────────────── -->
+    <section id="page-bulk" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Bulk Update</div>
+          <div class="page-sub">Select multiple jobs and apply changes in one action</div>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+
+        <!-- Search & select -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <div>
+              <div class="admin-card-title">Find jobs</div>
+              <div class="admin-card-sub">Search by job number, client, or status</div>
+            </div>
+          </div>
+          <div style="padding:12px 16px;">
+            <input type="search" id="bulk-search" placeholder="Search…"
+              style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;outline:none;"
+              aria-label="Search jobs for bulk selection" />
+          </div>
+          <div id="bulk-search-results"></div>
+        </div>
+
+        <!-- Selected & apply -->
+        <div>
+          <div class="admin-card" style="margin-bottom:16px;">
+            <div class="admin-card-header">
+              <div>
+                <div class="admin-card-title">Selected</div>
+                <div class="admin-card-sub" id="bulk-count">0 selected</div>
+              </div>
+            </div>
+            <div id="bulk-selected-list">
+              <div style="padding:14px 16px;font-size:13px;color:var(--ink-faint);">No jobs selected</div>
+            </div>
+          </div>
+
+          <div class="admin-card">
+            <div class="admin-card-header">
+              <div class="admin-card-title">Apply changes</div>
+            </div>
+            <div style="padding:16px 20px;">
+              <div class="field">
+                <label for="bulk-status">Status</label>
+                <select id="bulk-status"></select>
+              </div>
+              <div class="field">
+                <label for="bulk-location">Location</label>
+                <select id="bulk-location"></select>
+              </div>
+              <div class="field">
+                <label for="bulk-staff">Staff member</label>
+                <select id="bulk-staff"></select>
+              </div>
+              <div class="field">
+                <label for="bulk-due">Due date</label>
+                <input type="date" id="bulk-due" />
+              </div>
+              <div class="field">
+                <label for="bulk-comment">Add comment to all selected jobs</label>
+                <textarea id="bulk-comment" placeholder="Optional note…" rows="3"></textarea>
+              </div>
+              <div id="bulk-error" style="display:none;color:var(--danger);font-size:13px;margin-bottom:12px;"></div>
+              <div id="bulk-success-card" style="display:none;background:var(--surface-2);border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--success);margin-bottom:12px;border:1px solid var(--border);">
+                <strong>✓</strong> <span id="bulk-success-body"></span>
+              </div>
+              <button id="apply-bulk-btn" class="btn btn-gold" style="width:100%;">Apply to selected jobs</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section><!-- /page-bulk -->
+
+
+    <!-- ─── ADMIN PAGE ────────────────────────────────────── -->
+    <section id="page-admin" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Admin</div>
+          <div class="page-sub">Manage dropdown lists, users, and API tokens</div>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+
+        <!-- Statuses -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <div>
+              <div class="admin-card-title">Job Statuses</div>
+              <div class="admin-card-sub">Mark each as open or closed</div>
+            </div>
+          </div>
+          <div id="admin-statuses"></div>
+          <div class="admin-add">
+            <input type="text" id="new-status-input" placeholder="New status…" aria-label="New status name" />
+            <button id="add-status-btn" class="btn btn-secondary btn-sm">Add</button>
+          </div>
+        </div>
+
+        <!-- Locations -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <div class="admin-card-title">Locations</div>
+          </div>
+          <div class="admin-list" id="admin-locations"></div>
+          <div class="admin-add">
+            <input type="text" id="new-location-input" placeholder="New location…" aria-label="New location name" />
+            <button id="add-location-btn" class="btn btn-secondary btn-sm">Add</button>
+          </div>
+        </div>
+
+        <!-- Job Types -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <div class="admin-card-title">Job Types</div>
+          </div>
+          <div class="admin-list" id="admin-types"></div>
+          <div class="admin-add">
+            <input type="text" id="new-type-input" placeholder="New type…" aria-label="New job type" />
+            <button id="add-type-btn" class="btn btn-secondary btn-sm">Add</button>
+          </div>
+        </div>
+
+        <!-- Staff -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <div class="admin-card-title">Staff Members</div>
+          </div>
+          <div class="admin-list" id="admin-staff"></div>
+          <div class="admin-add">
+            <input type="text" id="new-staff-input" placeholder="New staff member…" aria-label="New staff member name" />
+            <button id="add-staff-btn" class="btn btn-secondary btn-sm">Add</button>
+          </div>
+        </div>
+
+      </div><!-- /admin-grid -->
+
+      <!-- Users -->
+      <div style="margin-top:28px;">
+        <div class="page-header" style="margin-bottom:12px;">
+          <div>
+            <div class="page-title" style="font-size:18px;">Users</div>
+            <div class="page-sub">Staff who have access to Bench</div>
+          </div>
+          <button id="invite-user-btn" class="btn btn-gold btn-sm">+ Invite user</button>
+        </div>
+        <div class="users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- API Tokens -->
+      <div style="margin-top:28px;">
+        <div class="page-header" style="margin-bottom:12px;">
+          <div>
+            <div class="page-title" style="font-size:18px;">API Tokens</div>
+            <div class="page-sub">For integrations with external systems (e.g. Lightspeed POS)</div>
+          </div>
+          <button id="generate-token-btn" class="btn btn-secondary btn-sm">+ Generate token</button>
+          <!-- generate-token-btn opens openGenerateTokenModal() — no prompt() used -->
+        </div>
+        <div class="admin-card">
+          <div id="api-tokens-list"></div>
+        </div>
+      </div>
+
+    </section><!-- /page-admin -->
+
+  </main><!-- /main-content -->
+</div><!-- /app-screen -->
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════════════ -->
+
+<!-- JOB DETAIL MODAL -->
+<div id="job-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-client-name">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-job-num" id="detail-job-num"></div>
+        <div class="modal-title" id="detail-client-name"></div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-top:3px;" id="detail-client-contact"></div>
+      </div>
+      <button id="close-job-modal-btn" class="modal-close" aria-label="Close job detail">×</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Detail grid -->
+      <div class="detail-grid">
+        <div>
+          <div class="detail-label">Status</div>
+          <select id="detail-status" class="detail-select" aria-label="Job status"></select>
+        </div>
+        <div>
+          <div class="detail-label">Location</div>
+          <select id="detail-location" class="detail-select" aria-label="Job location"></select>
+        </div>
+        <div>
+          <div class="detail-label">Type</div>
+          <select id="detail-type" class="detail-select" aria-label="Job type"></select>
+        </div>
+        <div>
+          <div class="detail-label">Staff member</div>
+          <select id="detail-staff" class="detail-select" aria-label="Assigned staff member"></select>
+        </div>
+        <div>
+          <div class="detail-label">Due date</div>
+          <input type="date" id="detail-due" class="detail-select" aria-label="Due date" />
+        </div>
+        <div>
+          <div class="detail-label">External reference</div>
+          <input type="text" id="detail-reference" class="detail-select" placeholder="e.g. Lightspeed #" aria-label="External reference" />
+        </div>
+        <div>
+          <div class="detail-label">Created</div>
+          <div class="detail-value" id="detail-created"></div>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="detail-label" style="margin-bottom:8px;">Description</div>
+      <div class="desc-block" id="detail-desc"></div>
+
+      <!-- Photos -->
+      <div class="photos-section">
+        <div class="photos-label">Intake photos</div>
+        <div class="photos-grid" id="detail-photos"></div>
+      </div>
+
+      <!-- Comments -->
+      <div class="comments-title">Activity &amp; comments</div>
+      <div id="detail-comments"></div>
+
+      <!-- Add comment -->
+      <div class="add-comment" style="margin-top:12px;">
+        <textarea id="new-comment-text" placeholder="Add a comment or update…" rows="2" aria-label="New comment"></textarea>
+        <div class="attach-preview" id="new-comment-attach-preview"></div>
+        <div class="add-comment-footer">
+          <label class="attach-btn" title="Attach photo">
+            📷 Attach photo
+            <input type="file" id="comment-attach-input" accept="image/*" multiple style="display:none;" aria-label="Attach photo to comment" />
+          </label>
+          <button class="btn btn-secondary btn-sm">Post comment</button>
+        </div>
+      </div>
+
+    </div><!-- /modal-body -->
+  </div><!-- /modal -->
+</div><!-- /job-modal -->
+
+
+<!-- NEW JOB MODAL -->
+<div id="new-job-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="new-job-title">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="new-job-title">New Job</div>
+      <button id="cancel-new-job-btn" class="modal-close" aria-label="Cancel new job">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div class="field">
+          <label for="nj-client-name">Client name <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="nj-client-name" placeholder="Full name or business" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="nj-client-contact">Contact (phone / email)</label>
+          <input type="text" id="nj-client-contact" placeholder="Optional" />
+        </div>
+        <div class="field">
+          <label for="nj-type">Job type <span style="color:var(--danger)">*</span></label>
+          <select id="nj-type"></select>
+        </div>
+        <div class="field">
+          <label for="nj-status">Initial status <span style="color:var(--danger)">*</span></label>
+          <select id="nj-status"></select>
+        </div>
+        <div class="field">
+          <label for="nj-location">Location <span style="color:var(--danger)">*</span></label>
+          <select id="nj-location"></select>
+        </div>
+        <div class="field">
+          <label for="nj-staff">Assigned staff</label>
+          <select id="nj-staff"></select>
+        </div>
+        <div class="field">
+          <label for="nj-due">Due date</label>
+          <input type="date" id="nj-due" />
+        </div>
+        <div class="field">
+          <label for="nj-reference">External reference</label>
+          <input type="text" id="nj-reference" placeholder="e.g. Lightspeed invoice #" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="nj-desc">Job description <span style="color:var(--danger)">*</span></label>
+        <textarea id="nj-desc" rows="4" placeholder="Describe the work required, materials, special notes…"></textarea>
+      </div>
+      <div class="field">
+        <label for="nj-photos">Intake photos</label>
+        <input type="file" id="nj-photos" accept="image/*" multiple aria-label="Attach intake photos" />
+        <div class="photos-grid mt-8" id="nj-photo-preview"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="cancel-new-job-btn-2" class="btn btn-secondary" onclick="document.getElementById('cancel-new-job-btn').click()">Cancel</button>
+      <button id="create-job-btn" class="btn btn-gold">Create job</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- INVITE USER MODAL -->
+<div id="new-user-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="invite-user-title">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title" id="invite-user-title">Invite User</div>
+      <button id="cancel-invite-btn-x" class="modal-close" aria-label="Cancel invite">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:20px;">
+        The user will receive an email invitation with a link to set their password.
+      </p>
+      <div class="field">
+        <label for="nu-name">Full name <span style="color:var(--danger)">*</span></label>
+        <input type="text" id="nu-name" placeholder="Jane Smith" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="nu-email">Email address <span style="color:var(--danger)">*</span></label>
+        <input type="email" id="nu-email" placeholder="jane@yourbusiness.com" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="nu-role">Role</label>
+        <select id="nu-role">
+          <option value="staff">Staff</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div id="nu-error" class="error-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button id="cancel-invite-btn" class="btn btn-secondary">Cancel</button>
+      <button id="confirm-invite-btn" class="btn btn-gold">Send invitation</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- SAVE FILTER VIEW MODAL -->
+<div id="save-filter-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="save-view-title">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <div class="modal-title" id="save-view-title">Save filter view</div>
+      <button id="cancel-save-view-btn-x" class="modal-close" aria-label="Cancel">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:16px;" id="sf-preview"></div>
+      <div class="field">
+        <label for="sf-name">View name</label>
+        <input type="text" id="sf-name" placeholder="e.g. Setter jobs this week" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="cancel-save-view-btn" class="btn btn-secondary">Cancel</button>
+      <button id="save-view-btn" class="btn btn-gold">Save view</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- APPEARANCE MODAL -->
+<div id="appearance-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
+  <div class="modal" style="max-width:660px;">
+    <div class="modal-header">
+      <div class="modal-title" id="appearance-title">Appearance</div>
+      <button id="cancel-appearance-btn" class="modal-close" aria-label="Close appearance settings">×</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Theme presets -->
+      <div class="appearance-section">
+        <div class="appearance-section-title">Theme presets</div>
+        <div class="theme-presets" id="theme-presets"></div>
+      </div>
+
+      <!-- Custom colours -->
+      <div class="appearance-section">
+        <div class="appearance-section-title">Custom colours</div>
+        <div class="colour-grid">
+          <div class="colour-field">
+            <label>Accent colour</label>
+            <div class="colour-field-row">
+              <input type="color" id="cp-accent" aria-label="Pick accent colour" />
+              <input type="text" id="ch-accent" maxlength="7" placeholder="#C9A84C" aria-label="Accent colour hex" />
+            </div>
+          </div>
+          <div class="colour-field">
+            <label>Background</label>
+            <div class="colour-field-row">
+              <input type="color" id="cp-bg" aria-label="Pick background colour" />
+              <input type="text" id="ch-bg" maxlength="7" placeholder="#FDFAF5" aria-label="Background hex" />
+            </div>
+          </div>
+          <div class="colour-field">
+            <label>Text colour</label>
+            <div class="colour-field-row">
+              <input type="color" id="cp-text" aria-label="Pick text colour" />
+              <input type="text" id="ch-text" maxlength="7" placeholder="#1A1714" aria-label="Text colour hex" />
+            </div>
+          </div>
+          <div class="colour-field">
+            <label>Navigation bar</label>
+            <div class="colour-field-row">
+              <input type="color" id="cp-nav" aria-label="Pick nav bar colour" />
+              <input type="text" id="ch-nav" maxlength="7" placeholder="#1A1714" aria-label="Nav bar hex" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Font -->
+      <div class="appearance-section">
+        <div class="appearance-section-title">Font</div>
+        <div class="font-options" id="font-options"></div>
+      </div>
+
+      <!-- Text size -->
+      <div class="appearance-section">
+        <div class="appearance-section-title">Text size</div>
+        <div class="size-options" id="size-options"></div>
+      </div>
+
+      <!-- Preview -->
+      <div class="appearance-preview">
+        <div class="appearance-preview-label">Preview</div>
+        <div id="appearance-preview-text">
+          The quick brown fox jumps over the lazy dog.
+          <span style="opacity:0.5;margin-left:10px;">Workshop Job Management</span>
+        </div>
+      </div>
+
+      <!-- Admin: set as default -->
+      <div id="admin-default-section" style="display:none;margin-top:20px;padding:14px 16px;background:var(--surface-2);border-radius:var(--radius);border:1px solid var(--border);">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--ink-mid);">
+          <input type="checkbox" id="set-as-default-cb" style="width:15px;height:15px;" />
+          Set this appearance as the default for all new staff members
+        </label>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button id="reset-appearance-btn" class="btn btn-secondary">Reset to default</button>
+      <button id="cancel-appearance-btn-2" class="btn btn-secondary"
+        onclick="document.getElementById('cancel-appearance-btn').click()">Cancel</button>
+      <button id="save-appearance-btn" class="btn btn-gold">Save</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     GLOBAL UI ELEMENTS
+════════════════════════════════════════════════════════════ -->
+
+<!-- Lightbox -->
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
+
+  <!-- Top controls -->
+  <div class="lightbox-controls">
+    <span id="lightbox-counter" class="lightbox-counter" aria-live="polite"></span>
+    <div class="lightbox-actions">
+      <a id="lightbox-download" class="lightbox-btn" href="#" download
+        title="Download photo" aria-label="Download photo">
+        ↓ Download
+      </a>
+      <button id="lightbox-close" class="lightbox-btn" aria-label="Close photo viewer">
+        × Close
+      </button>
+    </div>
+  </div>
+
+  <!-- Image -->
+  <div class="lightbox-stage">
+    <button id="lightbox-prev" class="lightbox-nav lightbox-nav-prev"
+      aria-label="Previous photo">‹</button>
+
+    <img id="lightbox-img" src="" alt="Full-size photo" />
+
+    <button id="lightbox-next" class="lightbox-nav lightbox-nav-next"
+      aria-label="Next photo">›</button>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     LOADING OVERLAY
+     Shown during boot and long async operations.
+════════════════════════════════════════════════════════════ -->
+<div id="loading-overlay" role="status" aria-live="polite">
+  <div class="loading-overlay-inner">
+    <div class="spinner spinner-lg"></div>
+    <div id="loading-overlay-label" class="loading-overlay-label">Loading…</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     INLINE CONFIRM DIALOG
+     Replaces native confirm() throughout — never blocks the tab.
+════════════════════════════════════════════════════════════ -->
+<div id="confirm-overlay" class="modal-overlay" role="alertdialog" aria-modal="true"
+  aria-labelledby="confirm-message">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-body" style="padding:28px;">
+      <p id="confirm-message" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:24px;"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button id="confirm-no-btn"  class="btn btn-secondary">Cancel</button>
+        <button id="confirm-yes-btn" class="btn btn-danger">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     GENERATE API TOKEN MODAL
+     Shows the raw token once in-UI — no alert() used.
+════════════════════════════════════════════════════════════ -->
+<div id="generate-token-modal" class="modal-overlay" role="dialog" aria-modal="true"
+  aria-labelledby="gen-token-title">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <div class="modal-title" id="gen-token-title">Generate API Token</div>
+      <button id="close-token-modal-btn" class="modal-close" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="new-token-label">Token label</label>
+        <input type="text" id="new-token-label"
+          placeholder="e.g. Lightspeed POS — City Store" autocomplete="off" />
+      </div>
+      <div id="new-token-error"
+        style="color:var(--danger);font-size:13px;margin-top:-8px;margin-bottom:12px;min-height:16px;"></div>
+
+      <!-- Token reveal — shown after successful generation -->
+      <div id="token-reveal-section" hidden>
+        <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px;">
+          ⚠️ Copy this token now. It will not be shown again.
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <code id="token-reveal-value"
+            style="flex:1;font-size:12px;background:var(--surface-3);padding:10px 12px;border-radius:var(--radius);word-break:break-all;border:1.5px solid var(--border);display:block;"></code>
+          <button id="copy-token-btn" class="btn btn-secondary btn-sm" style="flex-shrink:0;">Copy</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="confirm-generate-token-btn" class="btn btn-gold">Generate token</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     APP ENTRY POINT
+════════════════════════════════════════════════════════════ -->
+<script type="module" src="app.js"></script>
+
+</body>
+</html>
