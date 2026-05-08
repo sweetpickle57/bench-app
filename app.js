@@ -2,7 +2,7 @@
  * app.js — Bench UI logic
  *
  * Responsibilities:
- *   - Auth state management
+ *   - Auth state management  
  *   - Page routing
  *   - DOM rendering (targeted, not full re-renders)
  *   - Event delegation (zero inline handlers in HTML)
