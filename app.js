@@ -77,6 +77,18 @@ let workingAppearance = {};
 document.addEventListener('DOMContentLoaded', async () => {
   bindEventListeners();
 
+  // Supabase puts the recovery token in the URL hash after a password-reset email.
+  // We must handle this BEFORE checking for a normal session, because the hash
+  // token is what establishes the temporary session used to update the password.
+  const hash   = window.location.hash;
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  if (params.get('type') === 'recovery') {
+    // Clean the token out of the address bar so it can't be bookmarked or reused
+    history.replaceState(null, '', window.location.pathname);
+    showScreen('reset');
+    return;
+  }
+
   // Check for an existing session
   const session = await DB.getSession().catch(() => null);
   if (session) {
@@ -169,6 +181,46 @@ async function handleLogout() {
   state.lists      = null;
   state.savedViews = [];
   showScreen('login');
+}
+
+/* ── PASSWORD RESET ──────────────────────────────────────────────── */
+
+async function handleResetPassword() {
+  const pass    = document.getElementById('reset-pass').value;
+  const confirm = document.getElementById('reset-pass-confirm').value;
+  const btn     = document.getElementById('reset-btn');
+  const errEl   = document.getElementById('reset-error');
+
+  errEl.textContent = '';
+  errEl.classList.remove('visible');
+
+  if (!pass || pass.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters.';
+    errEl.classList.add('visible');
+    return;
+  }
+  if (pass !== confirm) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.classList.add('visible');
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    await DB.resetPassword(pass);
+    // Password updated — sign the user out cleanly and send them to login
+    await DB.signOut().catch(() => {});
+    showScreen('login');
+    setLoginError('Password updated — please sign in with your new password.');
+  } catch (err) {
+    errEl.textContent = err.message || 'Could not update password. Please try again.';
+    errEl.classList.add('visible');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Set new password';
+  }
 }
 
 function setLoginError(msg) {
@@ -1826,6 +1878,12 @@ function bindEventListeners() {
   document.getElementById('login-btn').addEventListener('click', handleLogin);
   document.getElementById('login-pass').addEventListener('keydown', e => {
     if (e.key === 'Enter') handleLogin();
+  });
+
+  // Password reset form
+  document.getElementById('reset-btn').addEventListener('click', handleResetPassword);
+  document.getElementById('reset-pass-confirm').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleResetPassword();
   });
 
   // Topbar
