@@ -45,6 +45,16 @@ export async function signOut() {
   if (error) throw error;
 }
 
+/**
+ * Update the current user's password.
+ * Called after Supabase redirects back with a recovery token — by that
+ * point the client already has a session, so updateUser works directly.
+ */
+export async function resetPassword(newPassword) {
+  const { error } = await getClient().auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
 export async function getSession() {
   const { data, error } = await getClient().auth.getSession();
   if (error) throw error;
