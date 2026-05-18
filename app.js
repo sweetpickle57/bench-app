@@ -80,9 +80,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Supabase puts the recovery token in the URL hash after a password-reset email.
   // We must handle this BEFORE checking for a normal session, because the hash
   // token is what establishes the temporary session used to update the password.
-  const hash   = window.location.hash;
-  const params = new URLSearchParams(hash.replace(/^#/, ''));
-  if (params.get('type') === 'recovery') {
+  const hash      = window.location.hash;
+  const params    = new URLSearchParams(hash.replace(/^#/, ''));
+  const tokenType = params.get('type');
+  if (tokenType === 'recovery' || tokenType === 'invite') {
     // Clean the token out of the address bar so it can't be bookmarked or reused
     history.replaceState(null, '', window.location.pathname);
     showScreen('reset');
