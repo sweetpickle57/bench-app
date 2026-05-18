@@ -84,7 +84,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const params    = new URLSearchParams(hash.replace(/^#/, ''));
   const tokenType = params.get('type');
   if (tokenType === 'recovery' || tokenType === 'invite') {
-    // Clean the token out of the address bar so it can't be bookmarked or reused
+    // Give the Supabase client time to read the token from the hash and
+    // exchange it for a session before we clear the URL. Without this,
+    // updateUser() fails because no session exists yet.
+    await new Promise(resolve => setTimeout(resolve, 500));
     history.replaceState(null, '', window.location.pathname);
     showScreen('reset');
     return;
