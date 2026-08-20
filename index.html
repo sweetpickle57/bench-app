@@ -13,24 +13,19 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <!--
-    Environment config injected by Vercel at runtime via _redirects / edge config,
-    OR served as a tiny generated script. In local dev, create a config.js file:
+    Supabase project config.
 
-      window.__BENCH_CONFIG__ = {
-        supabaseUrl:     "https://xxxx.supabase.co",
-        supabaseAnonKey: "eyJ..."
-      };
-
-    In Vercel: set SUPABASE_URL and SUPABASE_ANON_KEY as Environment Variables.
-    Vercel will replace the tokens below when serving this file via the
-    @vercel/static-config edge function (see vercel.json).
-
-    NEVER hard-code credentials here.
+    This is the PUBLIC anon key, not the service_role key. It is safe to
+    expose in browser-visible code — it grants no access on its own.
+    All real access control happens via Row Level Security policies in
+    schema.sql. The service_role key (which bypasses RLS) lives ONLY as a
+    server-side environment variable used by api/admin.js and is never
+    referenced here.
   -->
   <script>
     window.__BENCH_CONFIG__ = {
-      supabaseUrl:     "%SUPABASE_URL%",
-      supabaseAnonKey: "%SUPABASE_ANON_KEY%"
+      supabaseUrl:     "https://riaajnysyxqqhpmfhygy.supabase.co",
+      supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpYWFqbnlzeXhxcWhwbWZoeWd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMjg0NDgsImV4cCI6MjA5MzcwNDQ0OH0.KBTRSJaXIY3AP5rU5rxX7vJHJF4i8G30xn-7QXjpHas"
     };
   </script>
 </head>
