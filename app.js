@@ -84,10 +84,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const params    = new URLSearchParams(hash.replace(/^#/, ''));
   const tokenType = params.get('type');
   if (tokenType === 'recovery' || tokenType === 'invite') {
-    // Give the Supabase client time to read the token from the hash and
-    // exchange it for a session before we clear the URL. Without this,
-    // updateUser() fails because no session exists yet.
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // The Supabase client only reads the access_token out of the URL hash
+    // once — the moment it's first created (detectSessionInUrl). It hasn't
+    // been created yet at this point in boot, so we must force that to
+    // happen now, BEFORE we clear the hash below. Previously this used a
+    // blind 500ms timeout that never touched the client at all, so the
+    // hash was wiped before anything read the token — hence
+    // "Auth session missing!" on the reset-password screen.
+    await DB.getSession().catch(() => null);
     history.replaceState(null, '', window.location.pathname);
     showScreen('reset');
     return;
