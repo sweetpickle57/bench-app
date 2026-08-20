@@ -166,6 +166,7 @@ async function handleLogin() {
   const btn      = document.getElementById('login-btn');
 
   clearLoginError();
+  clearLoginInfo();
   if (!email || !password) { setLoginError('Please enter your email and password.'); return; }
 
   btn.disabled   = true;
@@ -179,6 +180,30 @@ async function handleLogin() {
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Sign in';
+  }
+}
+
+async function handleForgotPassword() {
+  const email = document.getElementById('login-email').value.trim();
+  const btn   = document.getElementById('forgot-password-btn');
+
+  clearLoginError();
+  clearLoginInfo();
+
+  if (!email) {
+    setLoginError('Enter your email address above first, then click "Forgot your password?".');
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    await DB.requestPasswordReset(email);
+    setLoginInfo('Check your email for a password reset link.');
+  } catch (err) {
+    // Deliberately vague — don't reveal whether the email exists
+    setLoginInfo('If an account exists for that email, a reset link has been sent.');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -238,6 +263,16 @@ function setLoginError(msg) {
 }
 function clearLoginError() {
   const el = document.getElementById('login-error');
+  el.textContent = '';
+  el.classList.remove('visible');
+}
+function setLoginInfo(msg) {
+  const el = document.getElementById('login-info');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+function clearLoginInfo() {
+  const el = document.getElementById('login-info');
   el.textContent = '';
   el.classList.remove('visible');
 }
@@ -1887,6 +1922,7 @@ function bindEventListeners() {
   document.getElementById('login-pass').addEventListener('keydown', e => {
     if (e.key === 'Enter') handleLogin();
   });
+  document.getElementById('forgot-password-btn').addEventListener('click', handleForgotPassword);
 
   // Password reset form
   document.getElementById('reset-btn').addEventListener('click', handleResetPassword);

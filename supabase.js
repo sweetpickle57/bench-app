@@ -55,6 +55,18 @@ export async function resetPassword(newPassword) {
   if (error) throw error;
 }
 
+/**
+ * Send a "reset your password" email to the given address.
+ * Supabase redirects the user back to this app's own URL afterwards,
+ * where the existing recovery-token handling in app.js takes over.
+ */
+export async function requestPasswordReset(email) {
+  const { error } = await getClient().auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+  if (error) throw error;
+}
+
 export async function getSession() {
   const { data, error } = await getClient().auth.getSession();
   if (error) throw error;
@@ -212,7 +224,7 @@ export async function getJobs({
     .select(`
       id, num, created_at, client_name, client_contact,
       reference, type, status, location, staff, due, description,
-      job_photos ( id, url )
+      job_photos ( id, storage_path )
     `)
     .order(col, { ascending: sortAsc })
     // Nulls last for due-date sort so undated jobs sink to the bottom
@@ -317,11 +329,11 @@ export async function getJob(id) {
     .from('jobs')
     .select(`
       *,
-      job_photos ( id, url, storage_path ),
+      job_photos ( id, storage_path ),
       comments (
         id, body, created_at,
         profiles ( id, name ),
-        comment_photos ( id, url, storage_path )
+        comment_photos ( id, storage_path )
       )
     `)
     .eq('id', id)
